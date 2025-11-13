@@ -1,14 +1,55 @@
-# Family Trio Analysis Pipeline - Chromosome 1
+# Family Trio Variant Analysis Pipeline
 ## MCDB 4520 Computational Genomics Group Project
 
 ### Project Overview
-Comprehensive variant analysis of a family trio (HG002/son, HG003/father, HG004/mother) 
-using Oxford Nanopore long-read sequencing data for chromosome 1.
+Flexible, automated pipeline for Oxford Nanopore long-read variant analysis of a family trio 
+(HG002/son, HG003/father, HG004/mother). Supports analysis of any chromosome(s) and sample(s).
 
 ### System Configuration
 - **CPU Cores**: 32
 - **Memory**: 188 GB RAM
 - **Workflow**: epi2me-labs/wf-human-variation (Nextflow)
+
+### Pipeline Versions
+
+**v2.0 (Flexible Pipeline)** - Recommended
+- Run any combination of samples and chromosomes
+- Parameterized via command-line flags
+- Batch processing with `--all` flags
+
+**v1.0 (Original)** - Chr1 Trio Analysis
+- Hardcoded for chromosome 1, all three samples
+- Simple execution: `./run_trio_analysis.sh`
+
+---
+
+## Quick Start
+
+### Option 1: Flexible Pipeline (v2.0) - Recommended
+
+```bash
+# Single sample, single chromosome
+./run_flexible_analysis.sh -s HG002 -c chr1 -o ./output
+
+# All samples on one chromosome
+./run_flexible_analysis.sh --all-samples -c chr1 -o ./output
+
+# One sample on all available chromosomes
+./run_flexible_analysis.sh -s HG002 --all-chromosomes -o ./output
+
+# Complete analysis (all samples × all chromosomes)
+./run_flexible_analysis.sh --all -o ./output
+
+# View all options
+./run_flexible_analysis.sh --help
+```
+
+### Option 2: Original Chr1 Trio Pipeline (v1.0)
+
+```bash
+# Runs all three samples on chromosome 1
+./run_trio_analysis.sh
+```
 
 ---
 
@@ -17,7 +58,10 @@ using Oxford Nanopore long-read sequencing data for chromosome 1.
 ```
 project/
 ├── nextflow.config                    # Nextflow configuration (max performance)
-├── run_trio_analysis.sh              # Main automated pipeline script
+├── run_flexible_analysis.sh          # v2: Flexible pipeline (recommended)
+├── run_trio_analysis.sh              # v1: Original chr1 trio pipeline
+├── smoke_test.sh                      # Validation test suite (24 tests)
+├── download_all_chromosomes.sh        # Bulk data download utility
 ├── summarize_performance.sh          # Performance statistics extractor
 ├── pipeline_master_TIMESTAMP.log     # Master execution log
 │
@@ -65,22 +109,32 @@ human_trios/
 
 ## Pipeline Execution
 
-### Running the Full Trio Analysis
+### Validation (Recommended First Step)
 
 ```bash
-cd /mnt/work_1/gest9386/CU_Boulder/MCDB-4520/project
+./smoke_test.sh
+```
+
+Runs 24 validation tests to ensure everything is set up correctly. All tests should pass before running analyses.
+
+### Running Analyses
+
+**Flexible Pipeline (v2.0):**
+```bash
+# Example: Analyze HG002 on chr1
+./run_flexible_analysis.sh -s HG002 -c chr1 -o ./output
+
+# Multiple samples and chromosomes
+./run_flexible_analysis.sh -s HG002 -s HG003 -c chr1 -c chr17 -o ./output
+```
+
+**Original Pipeline (v1.0):**
+```bash
+# Runs all three samples on chromosome 1
 ./run_trio_analysis.sh
 ```
 
-This script will:
-1. ✓ Analyze HG002 (son) - chromosome 1
-2. ✓ Analyze HG003 (father) - chromosome 1
-3. ✓ Analyze HG004 (mother) - chromosome 1
-4. ✓ Log detailed time statistics for each run
-5. ✓ Generate Nextflow reports, timelines, and DAGs
-6. ✓ Automatically clean work directories after successful completion
-
-**Estimated Runtime**: 1-4 hours per sample (depending on coverage and chromosome size)
+**Estimated Runtime**: 1-4 hours per sample per chromosome
 
 ---
 
