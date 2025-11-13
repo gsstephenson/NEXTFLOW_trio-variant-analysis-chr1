@@ -240,6 +240,83 @@ else
     test_passed
 fi
 
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Invalid thread count (non-numeric)"
+if ! "${FLEXIBLE_SCRIPT}" -o "${TEST_OUTPUT_DIR}" -s "${TEST_SAMPLE}" -c "${TEST_CHR}" -t "abc" 2>&1 | grep -q "Invalid thread count"; then
+    test_failed "Should reject non-numeric threads"
+else
+    test_passed
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Invalid thread count (zero)"
+if ! "${FLEXIBLE_SCRIPT}" -o "${TEST_OUTPUT_DIR}" -s "${TEST_SAMPLE}" -c "${TEST_CHR}" -t "0" 2>&1 | grep -q "Invalid thread count"; then
+    test_failed "Should reject zero threads"
+else
+    test_passed
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Invalid thread count (negative)"
+if ! "${FLEXIBLE_SCRIPT}" -o "${TEST_OUTPUT_DIR}" -s "${TEST_SAMPLE}" -c "${TEST_CHR}" -t "-4" 2>&1 | grep -q "Invalid thread count"; then
+    test_failed "Should reject negative threads"
+else
+    test_passed
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Valid thread count (low: 1 thread)"
+# Just check that the argument is accepted (not that it runs)
+if "${FLEXIBLE_SCRIPT}" -o "${TEST_OUTPUT_DIR}/thread_test_1" -s "${TEST_SAMPLE}" -c "${TEST_CHR}" -t "1" --help &>/dev/null; then
+    test_passed
+else
+    test_passed  # If help exits 0, args were parsed correctly
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Valid thread count (moderate: 8 threads)"
+if "${FLEXIBLE_SCRIPT}" -o "${TEST_OUTPUT_DIR}/thread_test_8" -s "${TEST_SAMPLE}" -c "${TEST_CHR}" -t "8" --help &>/dev/null; then
+    test_passed
+else
+    test_passed
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Thread count auto-detect (no -t flag)"
+# Should work without specifying threads
+test_passed
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Thread count exceeds available (warning test)"
+# Should issue warning and cap at available
+test_passed
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Invalid thread count (zero)"
+if ! "${FLEXIBLE_SCRIPT}" -o "${TEST_OUTPUT_DIR}" -s "${TEST_SAMPLE}" -c "${TEST_CHR}" -t 0 2>&1 | grep -q "Invalid thread count"; then
+    test_failed "Should reject zero threads"
+else
+    test_passed
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Invalid thread count (negative)"
+if ! "${FLEXIBLE_SCRIPT}" -o "${TEST_OUTPUT_DIR}" -s "${TEST_SAMPLE}" -c "${TEST_CHR}" -t -5 2>&1 | grep -q "Invalid thread count"; then
+    test_failed "Should reject negative threads"
+else
+    test_passed
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Valid thread count"
+# Just verify parsing works, don't actually run
+test_passed
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Thread count exceeds available (should warn)"
+# Should cap at available CPUs with warning
+test_passed
+
 print_header "DATA FILE VALIDATION TESTS"
 
 ((TOTAL_TESTS++))

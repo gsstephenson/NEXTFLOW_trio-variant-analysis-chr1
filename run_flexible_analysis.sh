@@ -30,8 +30,12 @@ CONFIG_FILE=""
 SAMPLES=()
 CHROMOSOMES=()
 OUTPUT_BASE=""
+MAX_THREADS=$(nproc)  # Auto-detect by default
 RUN_ALL_SAMPLES=false
 RUN_ALL_CHROMOSOMES=false
+MAX_THREADS=$(nproc)  # Auto-detect available CPUs
+DRY_RUN=false
+RESUME=false
 
 # All available samples and chromosomes
 ALL_SAMPLES=("HG002" "HG003" "HG004")
@@ -85,6 +89,15 @@ OPTIONAL FLAGS:
     --data-dir DIR
         Data directory containing BAM files
         
+    -t, --threads NUM
+        Maximum number of CPU threads to use (default: auto-detect)
+        
+    --dry-run
+        Show what would be executed without running analysis
+        
+    --resume
+        Resume failed/interrupted analysis from last checkpoint
+        
     -h, --help
         Show this help message and exit
 
@@ -106,6 +119,15 @@ EXAMPLES:
 
     # Analyze father on all chromosomes
     ./run_flexible_analysis.sh -s HG003 --all-chromosomes -o /path/to/output
+
+    # Limit to 8 threads (for smaller machines)
+    ./run_flexible_analysis.sh -s HG002 -c chr1 -o /path/to/output -t 8
+
+    # Use maximum threads (auto-detected if -t not specified)
+    ./run_flexible_analysis.sh -s HG002 -c chr1 -o /path/to/output -t 32
+
+    # Use specific thread count for smaller machine
+    ./run_flexible_analysis.sh -s HG002 -c chr1 -o /path/to/output -t 8
 
 OUTPUT STRUCTURE:
     OUTPUT_DIR/
@@ -208,6 +230,18 @@ parse_args() {
                 DATA_DIR="$2"
                 shift 2
                 ;;
+            -t|--threads)
+                MAX_THREADS="$2"
+                shift 2
+                ;;
+            --dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            --resume)
+                RESUME=true
+                shift
+                ;;
             *)
                 log_error "Unknown option: $1"
                 echo ""
@@ -259,6 +293,18 @@ parse_args() {
             exit 1
         fi
     done
+    
+    # Validate thread count
+    if ! [[ "${MAX_THREADS}" =~ ^[0-9]+$ ]] || [ "${MAX_THREADS}" -lt 1 ]; then
+        log_error "Invalid thread count: ${MAX_THREADS}. Must be a positive integer."
+        exit 1
+    fi
+    
+    local available_cpus=$(nproc)
+    if [ "${MAX_THREADS}" -gt "${available_cpus}" ]; then
+        log_warning "Requested ${MAX_THREADS} threads but only ${available_cpus} available. Using ${available_cpus}."
+        MAX_THREADS="${available_cpus}"
+    fi
 }
 
 #############################################################################
@@ -280,8 +326,27 @@ setup_environment() {
     log_info "Data directory: ${DATA_DIR}"
     log_info "Samples: ${SAMPLES[*]}"
     log_info "Chromosomes: ${CHROMOSOMES[*]}"
+    log_info "Max threads: ${MAX_THREADS}"
+    log_info "Dry run: ${DRY_RUN}"
+    log_info "Resume mode: ${RESUME}"
     log_info "Total analyses to run: $((${#SAMPLES[@]} * ${#CHROMOSOMES[@]}))"
     log_info ""
+    
+    # Dry run mode - just show what would be executed
+    if [ "${DRY_RUN}" = true ]; then
+        log_info "DRY RUN MODE - No analyses will be executed"
+        log_info ""
+        for sample in "${SAMPLES[@]}"; do
+            for chr in "${CHROMOSOMES[@]}"; do
+                log_info "Would run: ${sample} ${chr}"
+                log_info "  Input: ${DATA_DIR}/${sample}/${sample}_${chr}.bam"
+                log_info "  Output: ${OUTPUT_BASE}/${sample}_${chr}/output/"
+            done
+        done
+        log_info ""
+        log_info "DRY RUN COMPLETE - Use without --dry-run to execute"
+        exit 0
+    fi
     
     # Find or validate config file
     if [ -z "${CONFIG_FILE}" ]; then
@@ -367,6 +432,11 @@ run_analysis() {
         nf_cmd="${nf_cmd} -c ${CONFIG_FILE}"
     fi
     
+    # Add resume flag if enabled
+    if [ "${RESUME}" = true ]; then
+        nf_cmd="${nf_cmd} -resume"
+    fi
+    
     nf_cmd="${nf_cmd} \
         --bam ${bam_file} \
         --ref ${ref_genome} \
@@ -379,6 +449,7 @@ run_analysis() {
         --bam_min_coverage 0 \
         --annotation true \
         --out_dir ${output_dir} \
+        --threads ${MAX_THREADS} \
         -w ${work_dir} \
         -with-report ${log_dir}/nextflow_report_${timestamp}.html \
         -with-timeline ${log_dir}/nextflow_timeline_${timestamp}.html \
