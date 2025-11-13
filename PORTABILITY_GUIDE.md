@@ -1,4 +1,18 @@
-# Portability Guide: Running on Different Systems
+# Portability Guide: Running on Different Systems (v4.0)
+
+## 🎯 v4.0 Enhancements
+
+### Automatic Container Engine Detection
+The pipeline now automatically detects and configures the appropriate container engine:
+- **Piel Server**: Uses `singularity` 
+- **Odysseus**: Uses `apptainer`
+- **Custom**: Detects whichever is available
+
+### Intelligent Storage Management
+- Container tmp files automatically use `/scratch` (2.3T) instead of `/tmp` (490M)
+- Automatic cleanup after each analysis completes
+- Prevents "no space left on device" crashes during container pulls
+- Old Nextflow cache auto-cleaned (keeps 7 days)
 
 ## Quick Start for Different Environments
 

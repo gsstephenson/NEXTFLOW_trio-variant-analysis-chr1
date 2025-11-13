@@ -1,9 +1,10 @@
 # Family Trio Variant Analysis Pipeline
 ## MCDB 4520/5520 Computational Genomics Group Project
 
-> **Current Version: v3.0** - Cross-platform portability with auto-detection  
-> **Tested on:** ODYSSEUS local server, Piel server  
-> **Works anywhere:** Any Linux system with Nextflow installed
+> **Current Version: v4.0** - Production-Ready Cross-Platform Release  
+> **Tested on:** ODYSSEUS (apptainer), Piel server (singularity)  
+> **Zero Configuration:** Auto-detects environment, container engine, and paths  
+> **Intelligent Cleanup:** Automatic temp file management prevents disk space crashes
 
 ---
 
@@ -16,6 +17,25 @@
 - [Output Files](#output-files)
 - [Documentation](#documentation)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## 🚀 New in v4.0
+
+### Intelligent Auto-Detection
+- **Container Engine**: Automatically uses `singularity` on Piel, `apptainer` on Odysseus
+- **Path Resolution**: Auto-detects server environment and uses correct data paths
+- **Zero Configuration**: Works out-of-the-box on both servers
+
+### Smart Storage Management
+- **Automatic Cleanup**: Dynamically removes container tmp files after use
+- **Crash Prevention**: Uses `/scratch` (2.3T) instead of `/tmp` (490M) for container builds
+- **Cache Management**: Auto-cleanup of old Nextflow cache files (7+ days)
+
+### Production Ready
+- **Battle-Tested**: Verified on Piel (singularity) and Odysseus (apptainer)
+- **Robust Error Handling**: Fixed silent failure bugs, proper exit codes
+- **Resource Efficient**: Prevents disk space crashes during long-running analyses
 
 ---
 

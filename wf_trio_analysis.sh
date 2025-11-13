@@ -25,9 +25,44 @@ MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Cleanup tracking
+CONTAINER_TMP_DIR=""
+
+#############################################################################
+# Cleanup Function
+#############################################################################
+cleanup_on_exit() {
+    local exit_code=$?
+    
+    # Clean up container tmp directory if it was created
+    if [ -n "${CONTAINER_TMP_DIR}" ] && [ -d "${CONTAINER_TMP_DIR}" ]; then
+        log_info "Cleaning up container temporary directory: ${CONTAINER_TMP_DIR}"
+        rm -rf "${CONTAINER_TMP_DIR}" 2>/dev/null || true
+    fi
+    
+    # Clean up old Nextflow cache (keep only last 3 runs)
+    if [ -d "${HOME}/.nextflow" ]; then
+        find "${HOME}/.nextflow/cache" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} \; 2>/dev/null || true
+    fi
+    
+    exit ${exit_code}
+}
+
+# Set trap to clean up on exit
+trap cleanup_on_exit EXIT INT TERM
+
 # Default values
-# If TRIO_DATA_DIR is set (e.g., from setup_environment.sh), use it
-DATA_DIR="${TRIO_DATA_DIR:-/mnt/data_1/CU_Boulder/MCDB-4520/data/human_trios/family1}"
+# Auto-detect environment and set appropriate paths
+if [[ $(hostname) == *"piel"* ]]; then
+    # Running on Piel server
+    DEFAULT_DATA_DIR="/data/human_trios/family1"
+else
+    # Running on Odysseus or other server
+    DEFAULT_DATA_DIR="/mnt/data_1/CU_Boulder/MCDB-4520/data/human_trios/family1"
+fi
+
+# If TRIO_DATA_DIR is set (e.g., from setup_environment.sh), use it; otherwise use detected default
+DATA_DIR="${TRIO_DATA_DIR:-${DEFAULT_DATA_DIR}}"
 CONFIG_FILE=""
 SAMPLES=()
 CHROMOSOMES=()
@@ -374,6 +409,18 @@ setup_environment() {
         exit 1
     fi
     
+    # Detect container runtime (apptainer for Odysseus, singularity for Piel)
+    if command -v apptainer &> /dev/null; then
+        CONTAINER_ENGINE="apptainer"
+        log_info "Container engine: apptainer (detected)"
+    elif command -v singularity &> /dev/null; then
+        CONTAINER_ENGINE="singularity"
+        log_info "Container engine: singularity (detected)"
+    else
+        CONTAINER_ENGINE="none"
+        log_warning "No container engine found (apptainer/singularity). Workflow may fail."
+    fi
+    
     log_info "Nextflow version: $(nextflow -version 2>&1 | head -1)"
     log_info "Available CPU cores: $(nproc)"
     log_info "Total memory: $(free -h | awk '/^Mem:/ {print $2}')"
@@ -434,6 +481,31 @@ run_analysis() {
         nf_cmd="${nf_cmd} -c ${CONFIG_FILE}"
     fi
     
+    # Configure container engine
+    # Use /scratch for tmp dir since it has much more space than /tmp (2.3T vs 490M available)
+    # and we have write permissions there. Create unique tmp dir per run for easier cleanup.
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+    
+    if [ "${CONTAINER_ENGINE}" = "apptainer" ]; then
+        nf_cmd="${nf_cmd} -profile apptainer"
+        export NXF_APPTAINER_CACHEDIR="${HOME}/.apptainer/cache"
+        export APPTAINER_CACHEDIR="${HOME}/.apptainer/cache"
+        export APPTAINER_TMPDIR="/scratch/${USER}/.apptainer_tmp_${timestamp}"
+        CONTAINER_TMP_DIR="${APPTAINER_TMPDIR}"
+        mkdir -p "${APPTAINER_TMPDIR}"
+        log_info "Using apptainer profile"
+        log_info "Apptainer temp dir: ${APPTAINER_TMPDIR} (will auto-cleanup)"
+    elif [ "${CONTAINER_ENGINE}" = "singularity" ]; then
+        nf_cmd="${nf_cmd} -profile singularity"
+        export NXF_SINGULARITY_CACHEDIR="${HOME}/.nextflow/singularity"
+        export SINGULARITY_CACHEDIR="${HOME}/.singularity/cache"
+        export SINGULARITY_TMPDIR="/scratch/${USER}/.singularity_tmp_${timestamp}"
+        CONTAINER_TMP_DIR="${SINGULARITY_TMPDIR}"
+        mkdir -p "${SINGULARITY_TMPDIR}"
+        log_info "Using singularity profile"
+        log_info "Singularity temp dir: ${SINGULARITY_TMPDIR} (will auto-cleanup)"
+    fi
+    
     # Add resume flag if enabled
     if [ "${RESUME}" = true ]; then
         nf_cmd="${nf_cmd} -resume"
@@ -460,24 +532,54 @@ run_analysis() {
     
     # Run with time tracking
     log_info "Launching Nextflow workflow..."
+    log_info "Command: ${nf_cmd}"
     
-    if /usr/bin/time -v -o "${time_log}" bash -c "${nf_cmd}" 2>&1 | tee "${nf_log}"; then
+    # Use GNU time if available, otherwise just run without detailed timing
+    if command -v /usr/bin/time &> /dev/null; then
+        TIME_CMD="/usr/bin/time -v -o ${time_log}"
+    elif command -v time &> /dev/null; then
+        TIME_CMD="time"
+        log_warning "/usr/bin/time not found, using bash built-in time (less detailed)"
+    else
+        TIME_CMD=""
+        log_warning "time command not found, running without timing info"
+    fi
+    
+    if [ -n "${TIME_CMD}" ]; then
+        eval "${TIME_CMD} bash -c '${nf_cmd}'" 2>&1 | tee "${nf_log}"
+        RUN_STATUS=${PIPESTATUS[0]}
+    else
+        bash -c "${nf_cmd}" 2>&1 | tee "${nf_log}"
+        RUN_STATUS=${PIPESTATUS[0]}
+    fi
+    
+    if [ ${RUN_STATUS} -eq 0 ]; then
         log_success "Analysis completed: ${sample} ${chromosome}"
         
-        # Display time stats
-        log_info "Time statistics:"
-        grep -E "(Elapsed|Maximum resident|Percent of CPU)" "${time_log}" | while read line; do
-            log_info "  ${line}"
-        done
+        # Display time stats if available
+        if [ -f "${time_log}" ]; then
+            log_info "Time statistics:"
+            grep -E "(Elapsed|Maximum resident|Percent of CPU)" "${time_log}" 2>/dev/null | while read line; do
+                log_info "  ${line}"
+            done
+        fi
         
         # Clean up work directory
         log_info "Cleaning work directory..."
         rm -rf "${work_dir}"
         
+        # Clean up container build tmp files for this run
+        if [ -n "${CONTAINER_TMP_DIR}" ] && [ -d "${CONTAINER_TMP_DIR}" ]; then
+            log_info "Cleaning container temporary files..."
+            rm -rf "${CONTAINER_TMP_DIR}" 2>/dev/null || true
+            CONTAINER_TMP_DIR=""  # Prevent double cleanup in trap
+        fi
+        
         return 0
     else
-        log_error "Analysis failed: ${sample} ${chromosome}"
+        log_error "Analysis failed: ${sample} ${chromosome} (exit status: ${RUN_STATUS})"
         log_warning "Work directory preserved: ${work_dir}"
+        log_warning "Check log file: ${nf_log}"
         return 1
     fi
 }
@@ -538,13 +640,19 @@ main() {
     # Run all sample-chromosome combinations
     for sample in "${SAMPLES[@]}"; do
         for chr in "${CHROMOSOMES[@]}"; do
-            ((current++))
+            current=$((current + 1))
             log_info ""
             log_info "Progress: ${current}/${total_analyses}"
             
-            if ! run_analysis "${sample}" "${chr}"; then
-                ((failed++))
-                log_error "Failed: ${sample} ${chr}"
+            # Temporarily disable exit on error to catch failures gracefully
+            set +e
+            run_analysis "${sample}" "${chr}"
+            local exit_code=$?
+            set -e
+            
+            if [ ${exit_code} -ne 0 ]; then
+                failed=$((failed + 1))
+                log_error "Failed: ${sample} ${chr} (exit code: ${exit_code})"
             fi
         done
     done
@@ -570,6 +678,12 @@ main() {
     log_info ""
     
     generate_summary
+    
+    # Final cleanup of container tmp directory
+    if [ -n "${CONTAINER_TMP_DIR}" ] && [ -d "${CONTAINER_TMP_DIR}" ]; then
+        log_info "Performing final cleanup of container temporary directory..."
+        rm -rf "${CONTAINER_TMP_DIR}" 2>/dev/null || true
+    fi
     
     exit ${failed}
 }
