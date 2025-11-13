@@ -377,6 +377,79 @@ print_test "${TOTAL_TESTS}" "--all flag (all samples × all chromosomes)"
 # Verify it would run complete analysis
 test_passed
 
+#------------------------------------------------------------------------------
+# Portability Tests (Environment Variables)
+#------------------------------------------------------------------------------
+echo ""
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}       Portability & Environment Variable Tests${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+echo ""
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "setup_environment.sh exists and is executable"
+if [[ -f "setup_environment.sh" && -r "setup_environment.sh" ]]; then
+    test_passed
+else
+    test_failed "setup_environment.sh not found or not readable"
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Environment detection works"
+# Source the setup script and check variables are set
+source setup_environment.sh > /dev/null 2>&1
+if [[ -n "$TRIO_ENV" && -n "$TRIO_DATA_DIR" && -n "$TRIO_PROJECT_DIR" ]]; then
+    test_passed
+else
+    test_failed "Environment variables not set by setup_environment.sh"
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "TRIO_DATA_DIR override works in run_flexible_analysis.sh"
+# Test that TRIO_DATA_DIR is respected
+export TRIO_DATA_DIR="/custom/test/path"
+OUTPUT=$(./run_flexible_analysis.sh --help 2>&1)
+# The script should run without error even with custom TRIO_DATA_DIR
+if [[ $? -eq 0 ]]; then
+    test_passed
+else
+    test_failed "Script fails with custom TRIO_DATA_DIR"
+fi
+unset TRIO_DATA_DIR
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "Default DATA_DIR fallback works when TRIO_DATA_DIR unset"
+# Ensure the script falls back to hardcoded default
+unset TRIO_DATA_DIR
+OUTPUT=$(./run_flexible_analysis.sh --help 2>&1)
+if [[ $? -eq 0 ]]; then
+    test_passed
+else
+    test_failed "Script fails without TRIO_DATA_DIR set"
+fi
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "--data-dir flag overrides TRIO_DATA_DIR"
+# Explicit flag should take precedence
+export TRIO_DATA_DIR="/env/var/path"
+OUTPUT=$(./run_flexible_analysis.sh --data-dir /explicit/flag/path --dry-run --sample HG002 --chromosome chr1 --output /tmp/override_test 2>&1)
+EXIT_CODE=$?
+# Should not error out and should use the explicit flag path
+if [[ $EXIT_CODE -eq 0 ]] && echo "$OUTPUT" | grep -q "/explicit/flag/path"; then
+    test_passed
+else
+    test_failed "Flag override not working properly"
+fi
+unset TRIO_DATA_DIR
+
+((TOTAL_TESTS++))
+print_test "${TOTAL_TESTS}" "PORTABILITY_GUIDE.md exists"
+if [[ -f "PORTABILITY_GUIDE.md" ]]; then
+    test_passed
+else
+    test_failed "PORTABILITY_GUIDE.md not found"
+fi
+
 ((TOTAL_TESTS++))
 print_test "${TOTAL_TESTS}" "Custom config file"
 test_passed

@@ -1,6 +1,6 @@
 #!/bin/bash
 #############################################################################
-# Flexible Family Trio Variant Analysis Pipeline v2.0
+# Flexible Family Trio Variant Analysis Pipeline v3.0
 # MCDB 4520 - Computational Genomics Group Project
 # 
 # A parameterized pipeline for running wf-human-variation on any combination
@@ -8,6 +8,7 @@
 #
 # Usage: ./run_flexible_analysis.sh [OPTIONS]
 #
+# Version: 3.0 (Portability Release)
 # Author: gsstephenson
 # Repository: NEXTFLOW_trio-variant-analysis-chr1
 #############################################################################
@@ -25,7 +26,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Default values
-DATA_DIR="/mnt/data_1/CU_Boulder/MCDB-4520/data/human_trios/family1"
+# If TRIO_DATA_DIR is set (e.g., from setup_environment.sh), use it
+DATA_DIR="${TRIO_DATA_DIR:-/mnt/data_1/CU_Boulder/MCDB-4520/data/human_trios/family1}"
 CONFIG_FILE=""
 SAMPLES=()
 CHROMOSOMES=()
@@ -54,7 +56,7 @@ SAMPLE_SEX["HG004"]="XX"  # Mother
 #############################################################################
 show_help() {
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${MAGENTA}  Flexible Family Trio Variant Analysis Pipeline v2.0${NC}"
+    echo -e "${MAGENTA}  Flexible Family Trio Variant Analysis Pipeline v3.0${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════════════${NC}"
     echo ""
     cat << 'EOF'
@@ -320,7 +322,7 @@ setup_environment() {
     MASTER_LOG="${OUTPUT_BASE}/pipeline_master_${timestamp}.log"
     
     log_info "═══════════════════════════════════════════════════════════"
-    log_info "Flexible Trio Analysis Pipeline v2.0"
+    log_info "Flexible Trio Analysis Pipeline v3.0"
     log_info "═══════════════════════════════════════════════════════════"
     log_info "Output directory: ${OUTPUT_BASE}"
     log_info "Data directory: ${DATA_DIR}"
@@ -488,7 +490,7 @@ generate_summary() {
     
     cat > "${summary_file}" << EOF
 ═══════════════════════════════════════════════════════════
-Flexible Trio Analysis Pipeline v2.0 - Summary
+Flexible Trio Analysis Pipeline v3.0 - Summary
 ═══════════════════════════════════════════════════════════
 
 Run Date: $(date '+%Y-%m-%d %H:%M:%S')
